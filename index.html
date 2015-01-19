@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8" >
+<title>Snake</title>
+<style type="text/css">
+body { background-color:#000; color:#fff; width:300px; }
+a, a:visited { color:#fff }
+h1 { float:left }
+#faq { font-size:smaller; float:right; margin-top:2.5em; }
+
+#status { clear:both; }
+#board { background-color:#000; color:#fff; font-family:monospace; padding:1em; white-space:pre; }
+
+.snake { color:green }
+.apple { color:red }
+#left, #right { 
+  background-color:#333; 
+  border:solid 2px #666; 
+  display:block; 
+  float:left; 
+  font-size:18px; 
+  padding:.5em 1em; 
+  text-align:center; 
+  width:30%;
+}
+
+</style>
+</head>
+<body>
+<h1>Snake</h1>
+<p id="faq"><a href="faq.html">FAQ</a></p>
+
+<div id="status"><a href="#" onClick="nextLevel(); return false;">Start</a></div>
+<div id="board">##############################
+#                            #
+#           snake            #
+#                            #
+#       Left: <- or j        #
+#      Right: -> or k        #
+#      Start: up or n        #
+#                            #
+#                            #
+#      osric.com/games       #
+#                            #
+##############################
+</div>
+<div id="score"></div>
+
+<div>
+<a id="left" href="#" onClick="left(); return false;">left</a>
+<a id="right" href="#" onClick="right(); return false;">right</a>
+</div>
+
+<script src="shortcut.js"></script>
+<script>
+// this code is a mess and I know it.
+// I may or may not fix it later.
+
+
+document.getElementById("left").addEventListener("touchstart", function (event) { event.preventDefault(); left(); }, false);
+document.getElementById("right").addEventListener("touchstart", function (event) { event.preventDefault(); right(); }, false);
+
+
+var intervalID;
+var intervalDuration = 200;
+var boardWidth = 30;
+var boardHeight = 12;
+
+var board = "";
+
+var level = [];
+level[0] = "";
+
+level[1] = "";
+level[1] += "##############################";
+level[1] += "#                            #";
+level[1] += "#                            X";
+level[1] += "#                            #";
+level[1] += "#                            #";
+level[1] += "#                            #";
+level[1] += "#                            #";
+level[1] += "#                            #";
+level[1] += "#                            #";
+level[1] += "#                            #";
+level[1] += "#                            #";
+level[1] += "##############################";
+
+level[2] = "";
+level[2] += "####X#########################";
+level[2] += "#                            #";
+level[2] += "#                    ###     #";
+level[2] += "#      ### ###       ###     #";
+level[2] += "#      ### ###               #";
+level[2] += "#      ### ###               #";
+level[2] += "#                    ###     #";
+level[2] += "#                    ###     #";
+level[2] += "#                            #";
+level[2] += "#                            #";
+level[2] += "#                            #";
+level[2] += "##############################";
+
+level[3] = "";
+level[3] += "##############################";
+level[3] += "#                            #";
+level[3] += "#           #####            #";
+level[3] += "#         ###   ###          #";
+level[3] += "#       ###       ###        #";
+level[3] += "#     ###           ###      #";
+level[3] += "X   ###               ###    #";
+level[3] += "#                            #";
+level[3] += "#                            #";
+level[3] += "#                            #";
+level[3] += "#                            #";
+level[3] += "##############################";
+
+
+var exit = {
+  x:5,
+  y:0
+};
+
+var move;
+
+var game = {
+  turn:0,
+  level:0,
+  apples:5,
+  over:true
+}
+
+var snake = {
+  position:[{x:5,y:10}],
+  direction:"N",
+  growTurns:5,
+  head:function () {
+     return this.position[0];
+  },
+  reset:function () {
+     this.position = [{x:boardWidth/2, y:boardHeight}];
+     this.growTurns = 5;
+     this.direction = "N";
+  }
+};
+
+
+
+var apple = {
+  x:NaN,
+  y:NaN
+}
+
+var positionFromPoint = function (point) {
+  return point.x + boardWidth * point.y;
+}
+
+var pointFromPosition = function (position) {
+  var x, y;
+  x = position % boardWidth;
+  y = Math.floor(position / boardWidth);
+  return { "x":x, "y":y };
+}
+
+var pointsEqual = function (p1, p2) {
+  return p1.x === p2.x && p1.y === p2.y;
+}
+
+// merge 2 arrays and return the new array
+var merge = function (a, b) {
+  var arr = [];
+  var i;
+  for (i in a) {
+    arr.push(a[i]);
+  }
+  for (i in b) {
+    arr.push(b[i]);
+  }
+  return arr;
+}
+
+function draw() {
+  var str = board.split("");
+
+  if (apple == null && parseInt(game.apples, 10) === 0) {
+    var exitPosition = positionFromPoint(exit);
+    str[exitPosition] = " "; 
+  }
+
+  for (point in snake.position) {
+    var position = positionFromPoint(snake.position[point]);
+    str[position] = "<span class='snake'>S</span>";
+  }
+  
+  if (apple !== null) {
+    var applePosition = positionFromPoint(apple);
+    str[applePosition] = "<span class='apple'>*</span>";
+  }
+  
+  var i;
+  var str2 = [];
+  for (i = 0; i < boardHeight; i++) {
+    str2 = merge(str2,str.slice(i*boardWidth, (i+1)*boardWidth));
+    str2 = merge(str2, ["\n"]);
+  }
+  document.getElementById("board").innerHTML = str2.join("");
+}
+
+var isExit = function () {
+  if (apple == null && parseInt(game.apples, 10) === 0 && pointsEqual(exit, snake.head())) {
+    return true;
+  }
+  return false;
+}
+
+var isCollision = function () {
+  var position = positionFromPoint(snake.position[0]);
+  
+  if (isExit() || parseInt(game.turn, 10) === 0) {
+    return false;
+  } 
+  
+  var str = board.split("");
+  if (str[position] === "#") {
+    return true;
+  }
+  
+  var i;
+  for (i in snake.position) {
+    if (pointsEqual(snake.head(), snake.position[i]) && parseInt(i, 10) !== 0) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+var snakeGrowth = function () {
+  if (parseInt(snake.growTurns, 10) === 0) {
+    snake.position.pop();
+  } else {
+    snake.growTurns--;
+  }
+}
+
+var gameOver = function () {
+  document.getElementById("status").innerHTML = "Game Over. <a href='#' onClick='nextLevel(); return false'>Play Again?</a>";
+  game.over = true;
+  game.level = 0;
+  clearInterval(intervalID);
+}
+
+
+var north = function () {
+  snake.position.unshift({x:snake.head().x,y:snake.head().y-1});
+}
+
+var east = function () {
+  snake.position.unshift({x:snake.head().x+1,y:snake.head().y});
+}
+
+var south = function () {
+  snake.position.unshift({x:snake.head().x,y:snake.head().y+1});
+}
+
+var west = function () {
+  snake.position.unshift({x:snake.head().x-1,y:snake.head().y});
+}
+
+
+function left(event) {
+  if (snake.direction === "N") {
+    snake.direction = "W";
+    move = west;
+  }
+  else if (snake.direction === "E") {
+    snake.direction = "N";
+    move = north;
+  }
+  else if (snake.direction === "S") {
+    snake.direction = "E";
+    move = east;
+  }
+  else {
+    snake.direction = "S";
+    move = south;
+  }
+}
+
+function right(event) {
+  if (snake.direction === "N") {
+    snake.direction = "E";
+    move = east;
+  }
+  else if (snake.direction === "E") {
+    snake.direction = "S";
+    move = south;
+  }
+  else if (snake.direction === "S") {
+    snake.direction = "W";
+    move = west;
+  }
+  else {
+    snake.direction = "N";
+    move = north;
+  }
+}
+
+move = north;
+
+function next() {
+  if (snake.position.length === 0) {
+    game.over = true;
+    document.getElementById("status").innerHTML = "Level complete! <a href='#' onClick='nextLevel(); return false;'>Next level?</a>";
+    clearInterval(intervalID);
+    draw();
+    return;
+  }
+  move();
+  if (isCollision()) {
+    gameOver();
+  }
+
+  snakeGrowth();
+  
+  
+  if (apple !== null && pointsEqual(apple, snake.head())) {
+    snake.growTurns++;
+    addApple();
+  }
+  game.turn++;
+  draw();
+
+  if (isExit()) {
+    snake.position.shift();
+  }
+}
+
+addApple = function() {
+  if (game.apples === 0) {
+     apple = null;
+     document.getElementById("score").innerHTML = "Apples Left: " + game.apples;
+     return;
+  }
+  var str = board.split("");
+  for (point in snake.position) {
+    var position = positionFromPoint(snake.position[point]);
+    str[position] = "S";
+  }
+  var i;
+  var spaces = [];
+  for (i in str) {
+    if (str[i] === " ") {
+      spaces.push(i);
+    }
+  }
+  
+  var location = spaces[Math.floor(Math.random() * spaces.length)];
+  apple.x = location % boardWidth;
+  apple.y = Math.floor(location / boardWidth);
+  document.getElementById("score").innerHTML = "Apples Left: " + game.apples;
+  game.apples--;
+}
+
+  	shortcut.add("Right",function() { right(); });
+	shortcut.add("Left",function() { left(); });
+	shortcut.add("Up",function() { nextLevel(); });
+
+  	shortcut.add("j",function() { left(); });
+	shortcut.add("k",function() { right(); });
+	shortcut.add("n",function() { nextLevel(); });
+
+  
+
+  
+  start = function() {
+    // Pick next level, or random level if exhausted all levels
+    if (game.level < level.length) {
+      board = level[game.level]
+    } else {
+      board = level[Math.ceil(Math.random() * (level.length-1))];
+    }
+    
+    // Store exit position and replace with wall on board
+    var exitPosition = board.indexOf("X");
+    exit.x = pointFromPosition(exitPosition).x;
+    exit.y = pointFromPosition(exitPosition).y;
+    board = board.replace("X","#");
+    
+    document.getElementById("status").innerHTML = "Level: " + game.level;
+    addApple();
+    intervalID = window.setInterval(next, intervalDuration);
+  }
+ 
+var nextLevel = function () {
+  // do nothing if triggered during a game
+  if (!game.over) {
+    return;
+  }
+  game.over = false;
+  snake.reset();
+  move = north;
+  game.level++;
+  game.turn = 0;
+  game.apples = 5;
+  apple = {
+    x:0,
+    y:0
+  }
+  start();
+}
+
+
+</script>
+
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-19082249-1', 'auto');
+  ga('send', 'pageview');
+
+</script>
+</body>
+</html>
